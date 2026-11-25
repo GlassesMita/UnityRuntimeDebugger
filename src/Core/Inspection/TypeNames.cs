@@ -100,7 +100,7 @@ public static class TypeNames
             var arity = 0;
             if (tick >= 0)
             {
-                int.TryParse(name.AsSpan(tick + 1), out arity);
+                int.TryParse(name.Substring(tick + 1), out arity);
                 name = name.Substring(0, tick);
             }
 

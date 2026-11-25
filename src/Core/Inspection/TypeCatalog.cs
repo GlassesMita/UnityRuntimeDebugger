@@ -1,4 +1,5 @@
 using System.Reflection;
+using UnityRuntimeDebugger.Compat;
 
 namespace UnityRuntimeDebugger.Inspection;
 
@@ -291,10 +292,10 @@ public static class TypeCatalog
         if (fullName == null)
             return;
 
-        index.TryAdd(fullName, type);
+        CollectionCompat.TryAdd(index, fullName, type);
         // Il2CppInterop prefixes BCL namespaces: Il2CppSystem.*, Il2CppMono.*, Il2CppMicrosoft.* ...
         if (fullName.StartsWith("Il2Cpp", StringComparison.Ordinal) && type.Namespace?.StartsWith("Il2Cpp", StringComparison.Ordinal) == true)
-            index.TryAdd(fullName.Substring("Il2Cpp".Length), type);
+            CollectionCompat.TryAdd(index, fullName.Substring("Il2Cpp".Length), type);
     }
 
     private static IEnumerable<Type> LoadTypes(Assembly asm)

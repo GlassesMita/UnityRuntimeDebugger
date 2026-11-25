@@ -1,5 +1,6 @@
 using System.Text.Json;
 using UnityRuntimeDebugger.Http;
+using UnityRuntimeDebugger.Compat;
 
 namespace UnityRuntimeDebugger.Api;
 
@@ -56,7 +57,7 @@ internal sealed class ApiContext
     public string RequiredQuery(string name) => Query(name) ?? throw ApiException.BadRequest($"missing query parameter '{name}'");
 
     public int Int(string name, int fallback, int min = int.MinValue, int max = int.MaxValue)
-        => Query(name) is { } text ? int.TryParse(text, out var value) ? Math.Clamp(value, min, max) : throw ApiException.BadRequest($"'{name}' must be a number") : fallback;
+        => Query(name) is { } text ? int.TryParse(text, out var value) ? MathCompat.Clamp(value, min, max) : throw ApiException.BadRequest($"'{name}' must be a number") : fallback;
 
     public long Long(string name, long fallback)
         => Query(name) is { } text ? long.TryParse(text, out var value) ? value : throw ApiException.BadRequest($"'{name}' must be a number") : fallback;

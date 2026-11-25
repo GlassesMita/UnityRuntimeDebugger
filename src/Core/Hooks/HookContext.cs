@@ -4,6 +4,7 @@ using System.Reflection;
 using UnityRuntimeDebugger.Hosting;
 using UnityRuntimeDebugger.Inspection;
 using UnityRuntimeDebugger.Logging;
+using UnityRuntimeDebugger.Compat;
 
 namespace UnityRuntimeDebugger.Hooks;
 
@@ -172,7 +173,7 @@ public sealed class HookContext
 
     private bool TakeRecordSlot()
     {
-        var second = Environment.TickCount64 / 1000;
+        var second = EnvironmentCompat.TickCount64 / 1000;
         lock (_rate)
         {
             if (second != _window)

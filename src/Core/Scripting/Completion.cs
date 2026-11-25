@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using UnityRuntimeDebugger.Compat;
 
 namespace UnityRuntimeDebugger.Scripting;
 
@@ -37,7 +38,7 @@ internal static class Completion
 
     public static Result Complete(ScriptSession session, HandleRewriter rewriter, string code, int position)
     {
-        position = Math.Clamp(position, 0, code.Length);
+        position = MathCompat.Clamp(position, 0, code.Length);
         var start = position;
         while (start > 0 && (char.IsLetterOrDigit(code[start - 1]) || code[start - 1] == '_'))
             start--;

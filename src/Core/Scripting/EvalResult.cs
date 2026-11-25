@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using UnityRuntimeDebugger.Inspection;
+using UnityRuntimeDebugger.Compat;
 
 namespace UnityRuntimeDebugger.Scripting;
 
@@ -44,7 +45,7 @@ public sealed record DiagnosticView(string Id, string Severity, string Message, 
 
     private static (int line, int column) Position(string text, int offset)
     {
-        offset = Math.Clamp(offset, 0, text.Length);
+        offset = MathCompat.Clamp(offset, 0, text.Length);
         var line = 1;
         var lineStart = 0;
         for (var i = 0; i < offset; i++)

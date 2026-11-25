@@ -70,7 +70,7 @@ public sealed class HandleRewriter
 
                 string? replacement = null;
                 if (j > i + 1 && (j >= code.Length || !IsIdentifierChar(code[j])))
-                    replacement = HandleExpression(int.Parse(code.AsSpan(i + 1, j - i - 1)));
+                    replacement = HandleExpression(int.Parse(code.Substring(i + 1, j - i - 1)));
                 else if (next == '_' && (i + 2 >= code.Length || !IsIdentifierChar(code[i + 2])))
                 {
                     j = i + 2;

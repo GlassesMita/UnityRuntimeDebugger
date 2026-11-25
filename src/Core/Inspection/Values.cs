@@ -190,7 +190,7 @@ public sealed class Values
 
         var result = typeof(IEnumerable).IsAssignableFrom(type);
         if (!result && _runtime.IsNativeType(type) && !type.FullName!.EndsWith(".String", StringComparison.Ordinal))
-            result = type.GetMethod("GetEnumerator", BindingFlags.Public | BindingFlags.Instance, Type.EmptyTypes) != null;
+            result = type.GetMethod("GetEnumerator", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null) != null;
 
         lock (CollectionCache)
             CollectionCache[type] = result;
@@ -234,7 +234,7 @@ public sealed class Values
     {
         try
         {
-            var method = type.GetMethod("ToString", BindingFlags.Public | BindingFlags.Instance, Type.EmptyTypes);
+            var method = type.GetMethod("ToString", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
             if (method == null || method.DeclaringType == typeof(object) || method.DeclaringType == typeof(ValueType))
                 return null;
             return Truncate(value.ToString());

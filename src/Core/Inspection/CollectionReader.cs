@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Reflection;
+using UnityRuntimeDebugger.Compat;
 
 namespace UnityRuntimeDebugger.Inspection;
 
@@ -17,7 +18,7 @@ public sealed class CollectionReader
     public ItemPage Read(object target, int offset, int limit)
     {
         offset = Math.Max(0, offset);
-        limit = Math.Clamp(limit, 1, 1000);
+        limit = MathCompat.Clamp(limit, 1, 1000);
         var count = _values.CountOf(target);
         var items = new List<ItemView>();
 
@@ -39,7 +40,7 @@ public sealed class CollectionReader
         if (target is IEnumerable enumerable)
             return Enumerate(enumerable.GetEnumerator());
 
-        var getEnumerator = type.GetMethod("GetEnumerator", BindingFlags.Public | BindingFlags.Instance, Type.EmptyTypes)
+        var getEnumerator = type.GetMethod("GetEnumerator", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null)
                             ?? throw new InvalidOperationException($"{TypeNames.Display(type)} is not a collection");
         var enumerator = getEnumerator.Invoke(target, null) ?? throw new InvalidOperationException("GetEnumerator returned null");
         return Enumerate(new ReflectionEnumerator(enumerator));
@@ -132,7 +133,7 @@ public sealed class CollectionReader
         {
             _inner = inner;
             var type = inner.GetType();
-            _moveNext = type.GetMethod("MoveNext", BindingFlags.Public | BindingFlags.Instance, Type.EmptyTypes)
+            _moveNext = type.GetMethod("MoveNext", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null)
                         ?? throw new InvalidOperationException("enumerator has no MoveNext");
             _current = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                            .FirstOrDefault(p => p.Name == "Current" && p.GetIndexParameters().Length == 0)

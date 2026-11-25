@@ -8,6 +8,7 @@ using UnityRuntimeDebugger.Http;
 using UnityRuntimeDebugger.Inspection;
 using UnityRuntimeDebugger.Logging;
 using UnityRuntimeDebugger.Scripting;
+using UnityRuntimeDebugger.Compat;
 
 namespace UnityRuntimeDebugger.Hooks;
 
@@ -216,7 +217,7 @@ internal sealed class HookManager : IDisposable
     public async Task<object> Calls(int id, long after, int limit, TimeSpan wait, CancellationToken cancellation)
     {
         var hook = Find(id);
-        var page = await hook.Context.Calls.WaitAsync(after, Math.Clamp(limit, 1, 500), wait, cancellation);
+        var page = await hook.Context.Calls.WaitAsync(after, MathCompat.Clamp(limit, 1, 500), wait, cancellation);
         return new { calls = page.Items.Select(c => View(hook, c)).ToList(), cursor = page.Cursor, dropped = page.Dropped };
     }
 

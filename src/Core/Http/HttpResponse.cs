@@ -56,14 +56,77 @@ public sealed class HttpResponse
             head.Append("Content-Encoding: gzip\r\n");
         if (!Headers.ContainsKey("Cache-Control"))
             head.Append("Cache-Control: no-store\r\n");
-        foreach (var (name, value) in Headers)
+        foreach (var header in Headers)
+        {
+            var name = header.Key;
+            var value = header.Value;
             head.Append(name).Append(": ").Append(value).Append("\r\n");
+        }
         head.Append("\r\n");
 
-        await stream.WriteAsync(Encoding.ASCII.GetBytes(head.ToString()), cancellation);
+        await WriteAllAsync(stream, Encoding.ASCII.GetBytes(head.ToString()), cancellation);
         if (request?.Method != "HEAD")
-            await stream.WriteAsync(body, cancellation);
-        await stream.FlushAsync(cancellation);
+            await WriteAllAsync(stream, body, cancellation);
+        await FlushAsync(stream, cancellation);
+    }
+
+#if NETSTANDARD2_0
+    /// <summary>
+    /// Fully synchronous response write, for the same reason as HttpRequest.ReadSync: no await may
+    /// be introduced on the connection thread.
+    /// </summary>
+    internal void WriteSync(Stream stream, HttpRequest? request)
+    {
+        var gzip = Gzip != null && request?.Header("Accept-Encoding")?.Contains("gzip", StringComparison.OrdinalIgnoreCase) == true;
+        var body = gzip ? Gzip! : Body;
+
+        var head = new StringBuilder()
+            .Append("HTTP/1.1 ").Append(Status).Append(' ').Append(Reason(Status)).Append("\r\n")
+            .Append("Content-Type: ").Append(ContentType).Append("\r\n")
+            .Append("Content-Length: ").Append(body.Length).Append("\r\n")
+            .Append("X-Content-Type-Options: nosniff\r\n")
+            .Append("Connection: close\r\n");
+        if (gzip)
+            head.Append("Content-Encoding: gzip\r\n");
+        if (!Headers.ContainsKey("Cache-Control"))
+            head.Append("Cache-Control: no-store\r\n");
+        foreach (var header in Headers)
+            head.Append(header.Key).Append(": ").Append(header.Value).Append("\r\n");
+        head.Append("\r\n");
+
+        var headBytes = Encoding.ASCII.GetBytes(head.ToString());
+        stream.Write(headBytes, 0, headBytes.Length);
+        if (request?.Method != "HEAD")
+            stream.Write(body, 0, body.Length);
+        stream.Flush();
+    }
+#endif
+
+    /// <summary>netstandard2.0 has no Stream.WriteAsync(byte[], CancellationToken); chunk it.</summary>
+    private static async Task WriteAllAsync(Stream stream, byte[] data, CancellationToken cancellation)
+    {
+        try
+        {
+            await stream.WriteAsync(data, 0, data.Length, cancellation).ConfigureAwait(false);
+        }
+        catch (NotSupportedException)
+        {
+            // Some Mono streams only implement the synchronous path.
+            stream.Write(data, 0, data.Length);
+        }
+    }
+
+    private static Task FlushAsync(Stream stream, CancellationToken cancellation)
+    {
+        try
+        {
+            return stream.FlushAsync(cancellation);
+        }
+        catch (NotSupportedException)
+        {
+            stream.Flush();
+            return Task.CompletedTask;
+        }
     }
 
     private static bool Compressible(string contentType)
@@ -74,7 +137,7 @@ public sealed class HttpResponse
     {
         using var output = new MemoryStream();
         using (var gzip = new GZipStream(output, CompressionLevel.Optimal))
-            gzip.Write(body);
+            gzip.Write(body, 0, body.Length);
         return output.ToArray();
     }
 

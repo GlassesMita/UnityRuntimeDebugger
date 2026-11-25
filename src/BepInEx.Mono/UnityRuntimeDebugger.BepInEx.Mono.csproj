@@ -1,0 +1,92 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    BepInEx 6 Mono build of Unity Runtime Debugger.
+
+    Core's sources are compiled straight into this assembly (CompileCoreSources), plus the Mono adapter:
+    the loader entry point, the engine-facing IGame, and a MonoBehaviour main-thread pump. Unlike the
+    IL2CPP host there is no interop layer to bridge — game objects are plain managed objects — so
+    IRuntime stays on Core's ManagedRuntime and no type injection or native hook is needed.
+
+    Build:  dotnet build src/BepInEx.Mono
+  -->
+  <PropertyGroup>
+    <!--
+      netstandard2.0, not the IL2CPP host's net6.0. BepInEx 6 IL2CPP loads plugins into Il2CppInterop's
+      .NET 6 runtime; BepInEx 6 Mono loads them into the game's own Unity Mono runtime, which is a
+      .NET Framework 4.x / .NET Standard 2.0 profile (mscorlib 4.0.0.0, no System.Runtime 6.0 facade).
+      A net6.0 build compiles fine and is even listed by the chainloader, then dies in
+      RunModuleConstructor with "Could not load file or assembly 'System.Runtime, Version=6.0.0.0'".
+    -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>UnityRuntimeDebugger.Mono</AssemblyName>
+    <RootNamespace>UnityRuntimeDebugger.Mono</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DebugType>None</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <RestoreAdditionalProjectSources>https://nuget.bepinex.dev/v3/index.json</RestoreAdditionalProjectSources>
+    <!--
+      Dependencies ship as real files beside the plugin rather than Costura-embedded resources.
+      Unity's Mono does not unify assembly versions, so an embedded System.Buffers 4.0.3.0 cannot
+      satisfy System.Text.Json's request for 4.0.2.0 and the load fails even though the resource is
+      present. Loose DLLs are resolved by BepInEx's own plugin-directory probing, with
+      AssemblyRedirect as a by-name fallback.
+    -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <!--
+      MSBuild only auto-defines NETSTANDARD2_0 for its own pass; the Core sources globbed in here need
+      it explicitly so the compat shims and the AssemblyLoadContext guards take effect.
+    -->
+    <DefineConstants>$(DefineConstants);NETSTANDARD2_0</DefineConstants>
+    <CompileCoreSources>true</CompileCoreSources>
+  </PropertyGroup>
+  <Import Project="..\Core\Core.props" />
+
+  <ItemGroup>
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="2.1.0" />
+    <!--
+      Compile assets only: the running game already ships BepInEx's copies, and bundling them would
+      shadow the installed loader with a second, mismatched one.
+    -->
+    <PackageReference Include="BepInEx.Unity.Mono" Version="6.0.0-be.791" IncludeAssets="compile" PrivateAssets="all" />
+    <!--
+      Core is written against .NET 6 and serialises with System.Text.Json, which neither the Unity Mono
+      runtime nor BepInEx ships. 8.0.5 is the last line that still targets netstandard2.0.
+    -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" PrivateAssets="all" />
+    <PackageReference Include="PolySharp" Version="1.15.0" PrivateAssets="all" />
+    <PackageReference Include="System.Memory" Version="4.5.5" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="8.0.0" PrivateAssets="all" />
+    <PackageReference Include="System.Collections.Immutable" Version="8.0.0" PrivateAssets="all" />
+    <PackageReference Include="System.Text.Encodings.Web" Version="8.0.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Core's *sources* are compiled into this assembly, so nothing is actually referenced. This entry
+      only orders the build so web/dist exists first; SkipGetTargetFrameworkProperties stops MSBuild
+      from rejecting the pair, since Core targets net6.0 and this project cannot.
+    -->
+    <ProjectReference Include="..\Core\Core.csproj" ReferenceOutputAssembly="false" Private="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+
+  <!--
+    No UnityEngine reference override: this project compiles against BepInEx's NuGet "UnityEngine"
+    reference package (5.6.1) rather than one specific game, so the DLL stays portable across Mono
+    Unity versions. That stub lacks some newer APIs (e.g. Graphics.Blit's UV-scale overload), so the
+    IGame implementation sticks to the 5.6-era surface — see UnityGame.RenderPng.
+  -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);NU1701;CS1701</NoWarn>
+  </PropertyGroup>
+
+  <!-- Copy the plugin and every runtime dependency into the loader's plugin directory. -->
+  <Target Name="DeployToBepInEx" AfterTargets="Build" Condition="'$(BepInExDir)' != ''">
+    <ItemGroup>
+      <_Deploy Include="$(TargetDir)*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_Deploy)" DestinationFolder="$(BepInExDir)/plugins" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

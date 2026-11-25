@@ -86,7 +86,7 @@ public sealed class Feed<T>
     {
         lock (_sync)
         {
-            Array.Clear(_ring);
+            Array.Clear(_ring, 0, _ring.Length);
             _start = _next;
         }
     }

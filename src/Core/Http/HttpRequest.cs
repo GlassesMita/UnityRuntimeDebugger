@@ -57,7 +57,7 @@ public sealed class HttpRequest
         Array.Copy(_buffered, body, filled);
         while (filled < length)
         {
-            var read = await _stream.ReadAsync(body.AsMemory(filled, length - filled), cancellation);
+            var read = await _stream.ReadAsync(body, filled, length - filled, cancellation);
             if (read == 0)
                 throw new ApiException(400, "bad_request", "connection closed before the body was complete");
             filled += read;
@@ -84,13 +84,19 @@ public sealed class HttpRequest
                 Array.Resize(ref buffer, buffer.Length * 2);
             }
 
-            var read = await stream.ReadAsync(buffer.AsMemory(length), cancellation);
+            var read = await stream.ReadAsync(buffer, length, buffer.Length - length, cancellation);
             if (read == 0)
                 return null;
             length += read;
         }
 
-        var lines = Encoding.ASCII.GetString(buffer, 0, end).Split("\r\n");
+        return Parse(buffer, end, length, stream);
+    }
+
+    /// <summary>Builds the request from a complete header block already sitting in <paramref name="buffer"/>.</summary>
+    private static HttpRequest? Parse(byte[] buffer, int end, int length, Stream stream)
+    {
+        var lines = Encoding.ASCII.GetString(buffer, 0, end).Split(new[] { "\r\n" }, StringSplitOptions.None);
         var requestLine = lines[0].Split(' ');
         if (requestLine.Length < 3)
             return null;
@@ -104,8 +110,46 @@ public sealed class HttpRequest
         }
 
         var bodyStart = end + 4;
-        return new HttpRequest(requestLine[0].ToUpperInvariant(), requestLine[1], headers, stream, buffer[bodyStart..length]);
+        return new HttpRequest(requestLine[0].ToUpperInvariant(), requestLine[1], headers, stream, Slice(buffer, bodyStart, length - bodyStart));
     }
+
+    /// <summary>netstandard2.0 has no Range indices; copy the requested span instead.</summary>
+    private static byte[] Slice(byte[] source, int start, int count)
+    {
+        var result = new byte[Math.Max(0, count)];
+        Array.Copy(source, start, result, 0, Math.Max(0, count));
+        return result;
+    }
+
+#if NETSTANDARD2_0
+    /// <summary>
+    /// Fully synchronous parse. The async path awaits the socket, and on Unity's Mono that
+    /// continuation is scheduled on a ThreadPool that does not run for a plugin loaded before the
+    /// player loop — so the connection thread must never depend on one.
+    /// </summary>
+    internal static HttpRequest? ReadSync(Stream stream)
+    {
+        var buffer = new byte[8192];
+        var length = 0;
+        int end;
+        while ((end = HeaderEnd(buffer, length)) < 0)
+        {
+            if (length == buffer.Length)
+            {
+                if (buffer.Length >= MaxHeaderBytes)
+                    return null;
+                Array.Resize(ref buffer, buffer.Length * 2);
+            }
+
+            var read = stream.Read(buffer, length, buffer.Length - length);
+            if (read == 0)
+                return null;
+            length += read;
+        }
+
+        return Parse(buffer, end, length, stream);
+    }
+#endif
 
     private static int HeaderEnd(byte[] buffer, int length)
     {
@@ -121,7 +165,7 @@ public sealed class HttpRequest
     private static Dictionary<string, string> ParseQuery(string query)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var pair in query.Split(new[] { '&' }, StringSplitOptions.RemoveEmptyEntries))
         {
             var eq = pair.IndexOf('=');
             var key = Decode(eq < 0 ? pair : pair.Substring(0, eq));

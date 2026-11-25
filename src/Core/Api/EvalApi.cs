@@ -51,7 +51,7 @@ internal static class EvalApi
     private static (string code, EvalMode mode) Parse(string body)
     {
         var trimmed = body.TrimStart();
-        if (trimmed.StartsWith('{'))
+        if (trimmed.StartsWith("{", StringComparison.Ordinal))
         {
             try
             {

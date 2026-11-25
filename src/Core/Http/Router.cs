@@ -1,4 +1,5 @@
 using UnityRuntimeDebugger.Api;
+using UnityRuntimeDebugger.Compat;
 
 namespace UnityRuntimeDebugger.Http;
 
@@ -74,7 +75,7 @@ internal sealed class Router
             .ToList();
     }
 
-    internal static string[] Split(string path) => path.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+    internal static string[] Split(string path) => path.Trim('/').Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
 
     private Route Map(string method, string pattern, string summary, Func<ApiContext, Task<object?>> handler)
     {
@@ -113,7 +114,7 @@ internal sealed class Route
         foreach (var segment in _segments.Where(IsParameter))
         {
             var name = segment.Trim('{', '}');
-            Parameters.Add(new RouteParameter(name, "path", CommonPathParameters.GetValueOrDefault(name, "")));
+            Parameters.Add(new RouteParameter(name, "path", CollectionCompat.GetValueOrDefault(CommonPathParameters, name, "")));
         }
     }
 
@@ -212,5 +213,5 @@ internal sealed class Route
         return row[b.Length];
     }
 
-    private static bool IsParameter(string segment) => segment.StartsWith('{') && segment.EndsWith('}');
+    private static bool IsParameter(string segment) => segment.StartsWith("{", StringComparison.Ordinal) && segment.EndsWith("}", StringComparison.Ordinal);
 }

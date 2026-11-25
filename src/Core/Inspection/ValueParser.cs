@@ -88,7 +88,7 @@ public sealed class ValueParser
     public object? Parse(string text, Type target)
     {
         var trimmed = text.Trim();
-        if (trimmed.Length > 1 && trimmed[0] == '$' && int.TryParse(trimmed.AsSpan(1), out var id))
+        if (trimmed.Length > 1 && trimmed[0] == '$' && int.TryParse(trimmed.Substring(1), out var id))
             return FromHandle(id, target);
 
         if (Nullable.GetUnderlyingType(target) is { } underlying)
@@ -171,7 +171,7 @@ public sealed class ValueParser
             return System.Convert.ChangeType(double.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture), target, CultureInfo.InvariantCulture);
 
         if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-            return System.Convert.ChangeType(ulong.Parse(text.AsSpan(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture), target, CultureInfo.InvariantCulture);
+            return System.Convert.ChangeType(ulong.Parse(text.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture), target, CultureInfo.InvariantCulture);
 
         var number = decimal.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
         if (number != decimal.Truncate(number))
@@ -196,7 +196,7 @@ public sealed class ValueParser
     {
         var bytes = IsColor32(target);
         float[] rgba;
-        if (text.StartsWith('#'))
+        if (text.StartsWith("#", StringComparison.Ordinal))
         {
             var hex = text.Substring(1);
             if (hex.Length is not (6 or 8))
@@ -221,7 +221,7 @@ public sealed class ValueParser
         for (var i = 0; i < 4; i++)
         {
             var field = target.GetField(names[i])!;
-            var component = field.FieldType == typeof(byte) ? MathF.Round(rgba[i]) : rgba[i];
+            var component = field.FieldType == typeof(byte) ? Compat.MathCompat.Round(rgba[i]) : rgba[i];
             field.SetValue(boxed, System.Convert.ChangeType(component, field.FieldType, CultureInfo.InvariantCulture));
         }
 

@@ -51,6 +51,9 @@ public sealed class Debugger : IDisposable
         _help = new HelpPages(_router);
 
         _server = new HttpServer(IPAddress.Parse(options.ListenAddress), options.Port, HandleAsync, options.OnError);
+#if NETSTANDARD2_0
+        _server.SyncHandler = HandleSync;
+#endif
     }
 
     /// <summary>The running instance, for code compiled at runtime (handles, hook patches).</summary>
@@ -137,6 +140,55 @@ public sealed class Debugger : IDisposable
             Current = null;
     }
 
+#if NETSTANDARD2_0
+    /// <summary>
+    /// Synchronous entry for the Mono host. The async pipeline cannot be used there: every handler in
+    /// this assembly is an async state machine, and Unity's Mono does not complete the first await's
+    /// continuation on a plugin-loaded worker thread (no player loop yet, ThreadPool idle), so a
+    /// request would parse and then hang forever. Handlers are invoked through the same routes but
+    /// their tasks are completed on this thread.
+    /// </summary>
+    internal HttpResponse HandleSync(HttpRequest request)
+    {
+        var aborted = CancellationToken.None;
+        var path = request.Path;
+        if (!(path == "/api" || path.StartsWith("/api/", StringComparison.Ordinal)))
+            return HttpResponse.Text($"Not found: {path}\n", status: 404);
+
+        return HandleApiSync(request, aborted);
+    }
+
+    private HttpResponse HandleApiSync(HttpRequest request, CancellationToken aborted)
+    {
+        if (!IsAuthorized(request))
+        {
+            return Failure(new ApiException(401, "unauthorized",
+                "send the header 'Authorization: Bearer <token>'. The token is printed in the loader log at startup "
+                + "(search for 'UnityRuntimeDebugger token') or set in the config as [Security] Token.", "/help"));
+        }
+
+        var match = _router.Match(request.Method, request.Path);
+        if (match.Route == null)
+            return Failure(ApiException.NotFound($"no route {request.Method} {request.Path}", "/help/api"));
+
+        try
+        {
+            var task = match.Route.Handler(new ApiContext(this, request, match.Values, aborted));
+            // The route handlers are plain lambdas returning completed tasks (no awaits of their own
+            // for the status/logs routes), so the result is available without scheduling anything.
+            var result = task.IsCompleted ? task.Result : task.GetAwaiter().GetResult();
+            if (result is HttpResponse direct)
+                return direct;
+            var json = HttpResponse.Json(result);
+            return json;
+        }
+        catch (Exception ex)
+        {
+            return Failure(ex);
+        }
+    }
+#endif
+
     private async Task<HttpResponse> HandleAsync(HttpRequest request, CancellationToken aborted)
     {
         var path = request.Path;
@@ -181,7 +233,10 @@ public sealed class Debugger : IDisposable
         try
         {
             var result = await match.Route.Handler(new ApiContext(this, request, match.Values, aborted));
-            return result as HttpResponse ?? HttpResponse.Json(result);
+            if (result is HttpResponse direct)
+                return direct;
+            var json = HttpResponse.Json(result);
+            return json;
         }
         catch (Exception ex)
         {
@@ -220,9 +275,32 @@ public sealed class Debugger : IDisposable
         var header = request.Header("Authorization");
         const string scheme = "Bearer ";
         return header != null && header.StartsWith(scheme, StringComparison.OrdinalIgnoreCase)
-               && CryptographicOperations.FixedTimeEquals(Hash(header.Substring(scheme.Length).Trim()), _tokenHash);
+               && FixedTimeEquals(Hash(header.Substring(scheme.Length).Trim()), _tokenHash);
+    }
+
+    /// <summary>
+    /// Constant-time comparison. netstandard2.0 (the BepInEx 6 Mono build) has no
+    /// CryptographicOperations.FixedTimeEquals, so this is the same loop written out.
+    /// </summary>
+    private static bool FixedTimeEquals(byte[] left, byte[] right)
+    {
+        if (left == null || right == null || left.Length != right.Length)
+            return false;
+
+        var diff = 0;
+        for (var i = 0; i < left.Length; i++)
+            diff |= left[i] ^ right[i];
+        return diff == 0;
     }
 
     // Digests have a fixed length, so comparing them leaks nothing about the token.
-    private static byte[] Hash(string token) => SHA256.HashData(Encoding.UTF8.GetBytes(token));
+    private static byte[] Hash(string token)
+    {
+#if NETSTANDARD2_0
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        return sha.ComputeHash(Encoding.UTF8.GetBytes(token));
+#else
+        return System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(token));
+#endif
+    }
 }
