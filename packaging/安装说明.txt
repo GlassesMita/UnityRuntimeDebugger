@@ -1,0 +1,76 @@
+Unity Runtime Debugger 1.1.0 — BepInEx 6 Mono
+=============================================
+
+Unity 游戏运行时调试器（Mono 版）：场景/对象检查器、C# 控制台、Harmony 钩子、Web UI。
+
+
+安装（解压即用）
+----------------
+
+1. 先给游戏装好 BepInEx 6（Mono 版）。若游戏根目录下还没有 BepInEx\ 文件夹，
+   请先按 https://docs.bepinex.dev 的说明安装，并至少成功运行一次游戏。
+
+2. 把本压缩包内的 BepInEx 文件夹**覆盖**到游戏根目录（与游戏的 .exe 同级）。
+
+   合并后应当是这样：
+
+        <游戏根目录>\
+          GameName.exe
+          BepInEx\
+            core\                 ← BepInEx 自带，不要动
+            plugins\
+              UnityRuntimeDebugger.Mono.dll   ← 主插件
+              Microsoft.CodeAnalysis.dll      ← 以下均为依赖，缺一不可
+              Microsoft.CodeAnalysis.CSharp.dll
+              ...（共 17 个 DLL，全部保留）
+
+   重要：plugins 里的依赖 DLL 必须和主插件放在同一层，不要只拷主 DLL，
+   也不要新建子文件夹。Unity 的 Mono 不做程序集版本统一，
+   缺少 System.Text.Json / System.Buffers 等任一依赖都会导致插件加载失败。
+
+3. 启动游戏。
+
+
+使用
+----
+
+启动后日志会打印 token 和控制台地址：
+
+    [Warning:Unity Runtime Debugger] UnityRuntimeDebugger token: <token>
+    [Warning:Unity Runtime Debugger] UnityRuntimeDebugger web console: http://127.0.0.1:18765/#token=<token>
+
+用浏览器打开该地址即可（token 已包含在链接里）。
+
+配置文件在 BepInEx\config\UnityRuntimeDebugger.Mono.cfg，可改端口、监听地址、固定 token。
+
+    安全提醒：本调试器可在游戏进程内执行任意 C# 代码。
+    除非你清楚风险，否则请保持 ListenAddress = 127.0.0.1（默认）。
+
+
+我该用 Mono 版还是 IL2CPP 版？
+------------------------------
+
+    游戏目录下有 Managed\Assembly-CSharp.dll  → Mono（本包）
+    游戏目录下有 GameAssembly.dll             → IL2CPP（请用 MetaMikuAI/UnityRuntimeDebugger）
+
+两者不通用，为其中一个编译的插件在另一个里加载不起来。
+
+
+排查
+----
+
+插件没生效时，先确认：
+
+  * 游戏是 Mono 运行时（见上一节）。
+  * BepInEx 是 6.x Mono 版；BepInEx 5 与 BepInEx 6 IL2CPP 都不兼容。
+  * plugins 下 17 个 DLL 齐全且平铺在同一层。
+  * BepInEx\LogOutput.log 里搜索 "Unity Runtime Debugger"，
+    正常会有 "Loading [Unity Runtime Debugger ...]" 与上面那两行 token 日志。
+
+若出现 "Could not load file or assembly 'System.Text.Json'"，是依赖没拷全。
+
+
+许可证
+------
+
+AGPL-3.0-only。详见 https://github.com/GlassesMita/UnityRuntimeDebugger

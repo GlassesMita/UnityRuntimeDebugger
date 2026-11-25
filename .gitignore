@@ -11,3 +11,4 @@ local.props
 __pycache__/
 *.pyc
 FodyWeavers.xsd
+dist/
